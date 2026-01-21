@@ -1,0 +1,61 @@
+# Egg experiments and downloads
+eggs/*/exp/
+eggs/*/download
+
+# Sliding windows data
+eggs/pfogp/data/unlabeled/sliding_windows/
+eggs/pfogp/local/visual/
+eggs/pfogp/test
+eggs/image/local/qat_benchmark_output
+eggs/gipd_progression/local/plot
+eggs/gaitNDD/local/plot
+eggs/gaitNDD/local/plot2
+eggs/gaitNDD/local/window_plots
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Model checkpoints (large files)
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+
+# Data files (if large)
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.pkl
+*.pickle

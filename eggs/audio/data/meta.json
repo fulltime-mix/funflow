@@ -1,0 +1,39 @@
+{
+  "classes": [
+    "Healthy",
+    "Parkinson"
+  ],
+  "class_to_label": {
+    "Healthy": 0,
+    "Parkinson": 1
+  },
+  "num_classes": 2,
+  "train_samples": 2658,
+  "eval_samples": 319,
+  "test_samples": 300,
+  "total_samples": 3277,
+  "train_class_samples": {
+    "Parkinson": 976,
+    "Healthy": 1682
+  },
+  "eval_class_samples": {
+    "Parkinson": 152,
+    "Healthy": 167
+  },
+  "test_class_samples": {
+    "Healthy": 150,
+    "Parkinson": 150
+  },
+  "train_patients": {
+    "Healthy": 111,
+    "Parkinson": 46
+  },
+  "eval_patients": {
+    "Healthy": 10,
+    "Parkinson": 6
+  },
+  "test_patients": {
+    "Healthy": 11,
+    "Parkinson": 7
+  }
+}

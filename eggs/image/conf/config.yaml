@@ -1,0 +1,136 @@
+
+model:
+  type: ImageClassifier
+  backbone:
+    type: ResNetBackbone
+    depth: 18
+    in_channels: 3
+    pretrained: true
+  head:
+    type: LinearHead
+    in_channels: 512
+    num_classes: 2
+    dropout: 0.5
+  loss:
+    type: CrossEntropyLoss
+
+
+data:
+  num_workers: 8
+  prefetch_factor: 2
+  
+  # 训练数据
+  train:
+    data_file: ./data/train/data.jsonl
+    conf:
+      processor_module: local.dataset.image_processor
+      shuffle: true
+      parse_raw_conf: 
+        label_map:
+          healthy: 0
+          parkinson: 1
+      processors:
+        - name: load_image
+          enabled: true
+          mode: RGB
+        - name: resize
+          enabled: true
+          size: [224, 224]
+        - name: random_flip
+          enabled: true
+          prob: 0.5
+        - name: random_rotation
+          enabled: true
+          degrees: 15
+          prob: 0.5
+        - name: color_jitter
+          enabled: true
+          brightness: 0.2
+          contrast: 0.2
+          saturation: 0.2
+          prob: 0.5
+        - name: to_tensor
+          enabled: true
+        - name: normalize
+          enabled: true
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+      shuffle_conf:
+        shuffle_size: 1024
+      batch_conf:
+        batch_size: 256
+  
+  # 验证数据
+  val:
+    data_file: ./data/eval/data.jsonl
+    conf:
+      processor_module: local.dataset.image_processor
+      shuffle: false
+      parse_raw_conf: 
+        label_map:
+          healthy: 0
+          parkinson: 1
+      processors:
+        - name: load_image
+          enabled: true
+          mode: RGB
+        - name: resize
+          enabled: true
+          size: [224, 224]
+        - name: to_tensor
+          enabled: true
+        - name: normalize
+          enabled: true
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+      shuffle_conf:
+        shuffle_size: 64
+      batch_conf:
+        batch_size: 32
+
+
+optimizer:
+  type: AdamW
+  lr: 0.001
+  weight_decay: 0.01
+
+scheduler:
+  type: WarmupCosineAnnealingLR
+  warmup_epochs: 5
+  max_epochs: 100
+  warmup_lr: 0.000001
+  min_lr: 0.000001
+
+trainer:
+  max_epochs: 500
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+
+eval_cfg:
+  eval_interval: 1
+  evaluator_cfg: 
+    type: ImageEvaluator
+
+logger_cfg:
+  log_interval: 10
+
+checkpoint_cfg:
+  metric_name: accuracy
+  metric_mode: max
+  max_keep_ckpts: 10
+  save_best: true
+  save_last: true
+
+
+hooks:
+  # TensorBoard 可视化
+  - type: TensorBoardHook
+    enabled: true
+  
+  # 早停机制
+  - type: EarlyStoppingHook
+    enabled: true
+    patience: 50
+    metric_name: loss
+    metric_mode: min
+    min_delta: 0.0001

@@ -1,0 +1,153 @@
+# 模型配置
+model:
+  type: AudioClassifier
+  preprocessing: 
+    type: GlobalCMVN
+    cmvn_file: ./data/cmvn.json  # CMVN 文件路径
+    norm_var: true  # 是否归一化方差（绝大多数ASR都只做均值归一化）
+  backbone:
+    type: TCN
+    input_dim: 80
+    channels: [128, 128, 64, 64]
+    kernel_size: 3
+    dropout: 0.1
+    strides: [2, 2, 1, 1]
+  head:
+    type: PoolingHead
+    in_channels: 64
+    num_classes: 2
+    dropout: 0.2
+  loss:
+    type: FocalLoss
+    alpha: [0.5, 1.5]
+    gamma: 1.5
+
+
+# 数据配置
+data:
+  num_workers: 8
+  prefetch_factor: 2
+  
+  train:
+    data_file: ./data/train/data.jsonl
+    conf:
+      processor_module: local.dataset.audio_processor
+      shuffle: true
+      parse_raw_conf: 
+        label_map:
+          healthy: 0
+          parkinson: 1
+      processors:
+        # 1. 加载音频
+        - name: load_audio
+          enabled: true
+          target_sr: 16000
+        # 2. 过滤掉长度过短的音频
+        - name: filter_short_audio
+          enabled: true
+          min_duration: 1.0
+          sample_rate: 16000
+        # 3. 速度扰动 - 训练时启用
+        - name: speed_perturb
+          enabled: true
+          speeds: [0.9, 1.1]
+          prob: 0.5
+        # 4. 添加噪声 - 训练时启用
+        - name: add_noise
+          enabled: false
+          noise_level: 0.005
+          prob: 0.3
+        # 6. 计算 fbank 特征
+        - name: compute_fbank
+          enabled: true
+          num_mel_bins: 80
+          frame_length: 25.0
+          frame_shift: 10.0
+          dither: 0.0
+          style: kaldi
+        # 7. SpecAugment - 训练时启用
+        - name: spec_augment
+          enabled: true
+          freq_mask_num: 2
+          freq_mask_width: 10
+          time_mask_num: 2
+          time_mask_width: 20
+          prob: 0.5
+      shuffle_conf:
+        shuffle_size: 1024
+      batch_conf:
+        batch_size: 512
+    
+  val:
+    data_file: ./data/eval/data.jsonl
+    conf:
+      processor_module: local.dataset.audio_processor
+      shuffle: false
+      parse_raw_conf: 
+        label_map:
+          healthy: 0
+          parkinson: 1
+      processors:
+        # 1. 加载音频
+        - name: load_audio
+          enabled: true
+          target_sr: 16000
+        # 4. 计算 fbank 特征
+        - name: compute_fbank
+          enabled: true
+          num_mel_bins: 80
+          dither: 0.0
+          frame_length: 25.0
+          frame_shift: 10.0
+          style: kaldi
+      shuffle_conf:
+        shuffle_size: 128
+      batch_conf:
+        batch_size: 64
+
+
+optimizer:
+  type: AdamW
+  lr: 0.001
+  weight_decay: 0.01
+
+scheduler:
+  type: WarmupCosineAnnealingLR
+  warmup_epochs: 5
+  max_epochs: 100
+  warmup_lr: 0.000001
+  min_lr: 0.000001
+
+trainer:
+  max_epochs: 500
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+
+eval_cfg:
+  eval_interval: 1
+  evaluator_cfg: 
+    type: AudioClassificationEvaluator
+
+logger_cfg:
+  log_interval: 10
+
+checkpoint_cfg:
+  metric_name: accuracy
+  metric_mode: max
+  max_keep_ckpts: 10
+  save_best: true
+  save_last: true
+
+
+hooks:
+  # TensorBoard 可视化
+  - type: TensorBoardHook
+    enabled: true
+  
+  # 早停机制
+  - type: EarlyStoppingHook
+    enabled: true
+    patience: 50
+    metric_name: loss
+    metric_mode: min
+    min_delta: 0.0001

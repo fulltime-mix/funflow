@@ -1,0 +1,254 @@
+# ============================================================
+# VAD 音频分类完整配置
+# 
+# 此配置用于 fundiagnosis/bin/ 下的通用脚本
+# 包含模型、数据、优化器、训练器等所有配置
+# ============================================================
+
+# ============================================================
+# QAT 量化配置 (核心配置)
+# ============================================================
+quantization:
+  enabled: true                 # 是否启用 QAT
+  
+  # QAT 训练参数 (会覆盖 trainer 和 optimizer 的对应配置)
+  qat_max_epochs: 100            # QAT 训练轮数
+  qat_lr: 0.001               # QAT 学习率 (通常比正常训练小)
+  
+  # 量化后端配置
+  # - fbgemm: x86 CPU 优化 (推荐用于服务器部署)
+  # - qnnpack: ARM CPU 优化 (推荐用于移动端部署)
+  # - x86: 同 fbgemm
+  # - onednn: Intel oneAPI 优化
+  backend: fbgemm
+  
+  # 模块融合配置
+  fuse_modules: true            # 是否融合 Conv+BN+ReLU
+  
+  # 融合策略 (可选，默认自动检测)
+  # - resnet / resnet18 / resnet34 / resnet50 / resnet101: ResNet 系列
+  # - tcn: TCN 音频模型
+  # - default: 自动检测
+  # - null: 自动检测
+  fusion_strategy: tcn
+  
+  # Observer 和 BN 冻结时机
+  # - 前几个 epoch 正常训练，让 observer 收集激活值统计
+  # - 冻结 observer 后继续训练，让模型适应量化
+  # - 冻结 BN 统计后微调，稳定量化精度
+  freeze_observer_epoch: 2      # 冻结 observer 的 epoch
+  freeze_bn_epoch: 3            # 冻结 BN 统计的 epoch
+
+
+# ============================================================
+# 模型配置
+# ============================================================
+model:
+  type: AudioClassifier
+  cmvn_file: ./data/cmvn.json  # CMVN 文件路径
+  cmvn_norm_var: true  # 是否归一化方差（绝大多数ASR都只做均值归一化）
+  quantization: true
+  backbone:
+    type: TCN
+    input_dim: 80
+    channels: [128, 128, 64, 64]
+    kernel_size: 3
+    dropout: 0.1
+    strides: [2, 2, 1, 1]
+    quantization: true
+  head:
+    type: PoolingHead
+    in_channels: 64
+    num_classes: 2
+    dropout: 0.5
+    quantization: true
+  loss:
+    type: FocalLoss
+    alpha: [0.7, 1.3]
+    gamma: 2.0
+
+# 数据配置
+data:
+  num_workers: 8
+  prefetch_factor: 2
+  
+  train:
+    data_file: ./data/train/data.jsonl
+    conf:
+      processor_module: fundiagnosis.datasets.audio_processor
+      shuffle: true
+      parse_raw_conf: 
+        label_map:
+          healthy: 0
+          parkinson: 1
+      processors:
+        # 1. 加载音频
+        - name: load_audio
+          enabled: true
+          target_sr: 16000
+        # 2. 过滤掉长度过短的音频
+        - name: filter_short_audio
+          enabled: true
+          min_duration: 1.0
+          sample_rate: 16000
+        # 3. 速度扰动 - 训练时启用
+        - name: speed_perturb
+          enabled: true
+          speeds: [0.9, 1.1]
+          prob: 0.5
+        # 4. 添加噪声 - 训练时启用
+        - name: add_noise
+          enabled: false
+          noise_level: 0.005
+          prob: 0.3
+        # 6. 计算 fbank 特征
+        - name: compute_fbank
+          enabled: true
+          num_mel_bins: 80
+          dither: 0.0
+        # 7. SpecAugment - 训练时启用
+        - name: spec_augment
+          enabled: true
+          freq_mask_num: 2
+          freq_mask_width: 10
+          time_mask_num: 2
+          time_mask_width: 50
+          prob: 0.5
+      shuffle_conf:
+        shuffle_size: 1024
+      batch_conf:
+        batch_size: 512
+    
+  val:
+    data_file: ./data/eval/data.jsonl
+    conf:
+      processor_module: fundiagnosis.datasets.audio_processor
+      shuffle: false
+      parse_raw_conf: 
+        label_map:
+          healthy: 0
+          parkinson: 1
+      processors:
+        # 1. 加载音频
+        - name: load_audio
+          enabled: true
+          target_sr: 16000
+        # 4. 计算 fbank 特征
+        - name: compute_fbank
+          enabled: true
+          num_mel_bins: 80
+          dither: 0.0
+      shuffle_conf:
+        shuffle_size: 128
+      batch_conf:
+        batch_size: 64
+
+# ============================================================
+# 优化器配置
+# ============================================================
+optimizer:
+  # 类型: AdamW, Adam, SGD
+  type: AdamW
+  lr: 0.00005
+  weight_decay: 0.01
+
+# ============================================================
+# 参数组配置（差异化学习率，可选）
+# 使用预训练模型时，backbone 通常用较小学习率
+# ============================================================
+paramwise_cfg:
+  backbone_lr_mult: 1.0   # backbone 学习率倍率
+  head_lr_mult: 1.0       # head 学习率倍率
+  bias_decay_mult: 0.0    # bias 不做权重衰减
+  norm_decay_mult: 0.0    # 归一化层不做权重衰减
+  # 自定义模式（可选）
+  # custom_patterns:
+  #   layer4: {lr_mult: 1.0}
+  #   layer3: {lr_mult: 0.5}
+
+# ============================================================
+# 冻结配置（可选，用于迁移学习/微调）
+# ============================================================
+freeze_cfg:
+  # 初始化时冻结的层（支持子字符串匹配）
+  # 示例: ['backbone.conv1', 'backbone.layer1', 'backbone.layer2']
+  freeze_layers: []
+  
+  # 逐步解冻配置（可选）
+  # progressive_unfreeze:
+  #   5: ['backbone.layer4']   # epoch 5 解冻
+  #   10: ['backbone.layer3']  # epoch 10 解冻
+
+# ============================================================
+# 学习率调度器配置
+# ============================================================
+scheduler:
+  # 类型: CosineAnnealingLR, StepLR, MultiStepLR, OneCycleLR
+  type: CosineAnnealingLR
+  T_max: 40        # 余弦周期（通常等于 max_epochs）
+  eta_min: 0.000001 # 最小学习率
+
+# ============================================================
+# 训练器配置
+# ============================================================
+trainer:
+  max_epochs: 40
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+
+# ============================================================
+# 默认钩子配置（自动注册）
+# ============================================================
+
+# 日志记录
+logger_cfg:
+  log_interval: 10
+
+# 检查点保存
+checkpoint_cfg:
+  max_keep_ckpts: 5
+  save_best: true
+  save_last: true
+  metric_name: accuracy
+  metric_mode: max         # accuracy 用 max, loss 用 min
+
+# 验证评估
+eval_cfg:
+  eval_interval: 1
+  metric_name: accuracy
+  save_best: true
+  # 自定义评估器（可选）
+  # evaluator_cfg:
+  #   type: ClassificationEvaluator
+  #   num_classes: 2
+  #   compute_auc: true
+  # 自定义指标函数（可选，需在代码中定义）
+  # custom_metrics_fn: null
+
+# ============================================================
+# 可选钩子配置
+# ============================================================
+hooks:
+  # TensorBoard 可视化
+  - type: TensorBoardHook
+    enabled: true
+  
+  # 早停机制
+  - type: EarlyStoppingHook
+    enabled: true
+    patience: 50
+    metric_name: loss
+    mode: min           # loss 用 min, accuracy 用 max
+    min_delta: 0.0001
+  
+  # 学习率预热
+  - type: LRSchedulerHook
+    enabled: true
+    warmup_epochs: 2
+    warmup_lr: 0.000001
+
+  # QATHook (自动添加，以下为参考配置)
+  # - type: QATHook
+  #   freeze_observer_epoch: 2
+  #   freeze_bn_epoch: 3
+  #   verbose: true

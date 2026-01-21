@@ -1,0 +1,103 @@
+{
+  "summary": {
+    "total_files": 4,
+    "successful": 4,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "prediction_distribution": {
+    "parkinson": {
+      "count": 1,
+      "percentage": 25.0
+    },
+    "healthy": {
+      "count": 3,
+      "percentage": 75.0
+    }
+  },
+  "confidence_statistics": {
+    "mean": 0.7717197984457016,
+    "std": 0.12423431447738048,
+    "min": 0.5931872129440308,
+    "max": 0.9421854615211487,
+    "median": 0.7757532596588135
+  },
+  "predictions": [
+    {
+      "file": "/data/project/FunDiagnosis/eggs/audio/real_test_sample/1089_134686_000002_000000_0.wav",
+      "prediction": "parkinson",
+      "prediction_idx": 1,
+      "confidence": 0.9421854615211487,
+      "top_predictions": [
+        {
+          "class_idx": 1,
+          "class_name": "parkinson",
+          "probability": 0.9421854615211487
+        },
+        {
+          "class_idx": 0,
+          "class_name": "healthy",
+          "probability": 0.05781451612710953
+        }
+      ],
+      "status": "success"
+    },
+    {
+      "file": "/data/project/FunDiagnosis/eggs/audio/real_test_sample/1_726_0.wav",
+      "prediction": "healthy",
+      "prediction_idx": 0,
+      "confidence": 0.7561102509498596,
+      "top_predictions": [
+        {
+          "class_idx": 0,
+          "class_name": "healthy",
+          "probability": 0.7561102509498596
+        },
+        {
+          "class_idx": 1,
+          "class_name": "parkinson",
+          "probability": 0.2438896894454956
+        }
+      ],
+      "status": "success"
+    },
+    {
+      "file": "/data/project/FunDiagnosis/eggs/audio/real_test_sample/pzb.wav",
+      "prediction": "healthy",
+      "prediction_idx": 0,
+      "confidence": 0.7953962683677673,
+      "top_predictions": [
+        {
+          "class_idx": 0,
+          "class_name": "healthy",
+          "probability": 0.7953962683677673
+        },
+        {
+          "class_idx": 1,
+          "class_name": "parkinson",
+          "probability": 0.20460373163223267
+        }
+      ],
+      "status": "success"
+    },
+    {
+      "file": "/data/project/FunDiagnosis/eggs/audio/real_test_sample/pzb_syn.wav",
+      "prediction": "healthy",
+      "prediction_idx": 0,
+      "confidence": 0.5931872129440308,
+      "top_predictions": [
+        {
+          "class_idx": 0,
+          "class_name": "healthy",
+          "probability": 0.5931872129440308
+        },
+        {
+          "class_idx": 1,
+          "class_name": "parkinson",
+          "probability": 0.40681275725364685
+        }
+      ],
+      "status": "success"
+    }
+  ]
+}

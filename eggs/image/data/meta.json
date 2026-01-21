@@ -1,0 +1,15 @@
+{
+  "classes": [
+    "healthy",
+    "parkinson"
+  ],
+  "class_to_label": {
+    "healthy": 0,
+    "parkinson": 1
+  },
+  "num_classes": 2,
+  "train_samples": 2934,
+  "eval_samples": 366,
+  "test_samples": 366,
+  "total_samples": 3666
+}

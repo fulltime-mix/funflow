@@ -1,0 +1,47 @@
+# Core Deep Learning Frameworks
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Numerical Computing
+numpy>=1.19.0
+scipy>=1.7.0
+
+# Machine Learning & Data Processing
+scikit-learn>=1.0.0
+pandas>=1.3.0
+
+# Configuration & Serialization
+pyyaml>=6.0
+
+# Progress & Logging
+tqdm>=4.62.0
+
+# Model Export & Deployment
+onnx>=1.11.0
+onnxruntime>=1.10.0
+onnxsim>=0.4.0
+
+# Audio Processing
+librosa>=0.9.0
+soundfile>=0.10.0
+silero-vad>=4.0.0
+
+# Image Processing
+pillow>=9.0.0
+timm>=0.9.0
+
+# Model Analysis
+thop>=0.1.0
+
+# Model Serialization
+safetensors>=0.3.0
+
+# HTTP Requests
+requests>=2.25.0
+
+# Google APIs (optional)
+google-api-python-client>=2.0.0
+
+# Visualization (optional, for TensorBoard hook)
+matplotlib>=3.3.0

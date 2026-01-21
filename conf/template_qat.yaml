@@ -1,0 +1,278 @@
+# ============================================================
+# FunDiagnosis QAT (量化感知训练) 配置模板
+# 
+# 用于 fundiagnosis/bin/train_qat.py 训练脚本
+#
+# Usage:
+#   python fundiagnosis/bin/train_qat.py \
+#       --config conf/config_qat.yaml \
+#       --checkpoint exp/avg_5.pth \
+#       --work_dir exp/qat
+# ============================================================
+
+# ============================================================
+# QAT 量化配置 (核心配置)
+# ============================================================
+quantization:
+  enabled: true                 # 是否启用 QAT
+  
+  # QAT 训练参数 (会覆盖 trainer 和 optimizer 的对应配置)
+  qat_max_epochs: 20            # QAT 训练轮数
+  qat_lr: 0.00001               # QAT 学习率 (通常比正常训练小)
+  
+  # 量化后端配置
+  # - fbgemm: x86 CPU 优化 (推荐用于服务器部署)
+  # - qnnpack: ARM CPU 优化 (推荐用于移动端部署)
+  # - x86: 同 fbgemm
+  # - onednn: Intel oneAPI 优化
+  backend: fbgemm
+  
+  # 模块融合配置
+  fuse_modules: true            # 是否融合 Conv+BN+ReLU
+  
+  # 融合策略 (可选，默认自动检测)
+  # - resnet / resnet18 / resnet34 / resnet50 / resnet101: ResNet 系列
+  # - audiocnn: AudioCNN 音频模型
+  # - conv1d: Conv1D 时序模型
+  # - default: 自动检测
+  # - null: 自动检测
+  fusion_strategy: resnet18
+  
+  # Observer 和 BN 冻结时机
+  # - 前几个 epoch 正常训练，让 observer 收集激活值统计
+  # - 冻结 observer 后继续训练，让模型适应量化
+  # - 冻结 BN 统计后微调，稳定量化精度
+  freeze_observer_epoch: 2      # 冻结 observer 的 epoch
+  freeze_bn_epoch: 3            # 冻结 BN 统计的 epoch
+
+# ============================================================
+# 模型配置
+# ============================================================
+model:
+  # 模型类型: ImageClassifier, AudioClassifier, SeriesClassifier
+  type: AudioClassifier
+  quantization: true          # 启用量化支持
+  
+  # 预处理配置（可选）
+  # GlobalCMVN: 全局 CMVN 归一化（音频）
+  preprocessing:
+    type: GlobalCMVN
+    cmvn_file: ./data/cmvn.json
+    norm_var: true
+  
+  # Backbone 配置（必需）
+  # 音频: AudioCNN, LSTM, GRU, Conv1D
+  # 图像: ResNet (depth: 18/34/50/101)
+  # 注意: 必须提供所有必需参数（input_dim, hidden_size等）
+  backbone:
+    type: AudioCNN
+    input_dim: 80              # FBank 特征维度
+    base_channels: 64          # 基础通道数
+    num_blocks: 4              # 卷积块数量
+    kernel_size: 3
+    dropout: 0.1
+  
+  # Neck 配置（可选）
+  neck: null
+  
+  # 分类头配置（必需）
+  # 注意: 必须提供 in_channels 和 num_classes
+  head:
+    type: MLPHead
+    in_channels: 256           # AudioCNN 输出通道数（base_channels=64, num_blocks=4 -> 256）
+    num_classes: 2
+    hidden_dims: [256, 128]
+    dropout: 0.5
+  
+  # 损失函数: CrossEntropyLoss, FocalLoss, LabelSmoothingLoss
+  loss:
+    type: CrossEntropyLoss
+
+# ============================================================
+# 数据配置
+# ============================================================
+data:
+  num_workers: 8
+  prefetch_factor: 2
+  
+  # 训练数据
+  train:
+    data_file: ./data/train/data.jsonl
+    conf:
+      processor_module: fundiagnosis.datasets.image_processor
+      shuffle: true
+      parse_raw_conf: 
+        label_map:
+          healthy: 0
+          parkinson: 1
+      processors:
+        - name: load_image
+          enabled: true
+          mode: RGB
+        - name: resize
+          enabled: true
+          size: [224, 224]
+        - name: random_flip
+          enabled: true
+          prob: 0.5
+        - name: random_rotation
+          enabled: true
+          degrees: 15
+          prob: 0.5
+        - name: color_jitter
+          enabled: true
+          brightness: 0.2
+          contrast: 0.2
+          saturation: 0.2
+          prob: 0.5
+        - name: to_tensor
+          enabled: true
+        - name: normalize
+          enabled: true
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+      shuffle_conf:
+        shuffle_size: 1024
+      batch_conf:
+        batch_size: 256
+  
+  # 验证数据
+  val:
+    data_file: ./data/eval/data.jsonl
+    conf:
+      processor_module: fundiagnosis.datasets.image_processor
+      shuffle: false
+      parse_raw_conf: 
+        label_map:
+          healthy: 0
+          parkinson: 1
+      processors:
+        - name: load_image
+          enabled: true
+          mode: RGB
+        - name: resize
+          enabled: true
+          size: [224, 224]
+        - name: to_tensor
+          enabled: true
+        - name: normalize
+          enabled: true
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+      shuffle_conf:
+        shuffle_size: 64
+      batch_conf:
+        batch_size: 32
+
+# ============================================================
+# 优化器配置
+# 注意: QAT 时会被 quantization.qat_lr 覆盖
+# ============================================================
+optimizer:
+  # 类型: AdamW, Adam, SGD
+  type: AdamW
+  lr: 0.00001           # QAT 学习率通常较小
+  weight_decay: 0.01
+
+# ============================================================
+# 参数组配置（差异化学习率，可选）
+# 使用预训练模型时，backbone 通常用较小学习率
+# ============================================================
+paramwise_cfg:
+  backbone_lr_mult: 1.0   # backbone 学习率倍率
+  head_lr_mult: 1.0       # head 学习率倍率
+  bias_decay_mult: 0.0    # bias 不做权重衰减
+  norm_decay_mult: 0.0    # 归一化层不做权重衰减
+  # 自定义模式（可选）
+  # custom_patterns:
+  #   layer4: {lr_mult: 1.0}
+  #   layer3: {lr_mult: 0.5}
+
+# ============================================================
+# 冻结配置（可选，用于迁移学习/微调）
+# ============================================================
+freeze_cfg:
+  # 初始化时冻结的层（支持子字符串匹配）
+  # 示例: ['backbone.conv1', 'backbone.layer1', 'backbone.layer2']
+  freeze_layers: []
+  
+  # 逐步解冻配置（可选）
+  # progressive_unfreeze:
+  #   5: ['backbone.layer4']   # epoch 5 解冻
+  #   10: ['backbone.layer3']  # epoch 10 解冻
+
+# ============================================================
+# 学习率调度器配置
+# ============================================================
+scheduler:
+  # 类型: CosineAnnealingLR, StepLR, MultiStepLR, OneCycleLR
+  type: CosineAnnealingLR
+  T_max: 20             # 余弦周期（与 qat_max_epochs 一致）
+  eta_min: 0.000001     # 最小学习率
+
+# ============================================================
+# 训练器配置
+# 注意: max_epochs 会被 quantization.qat_max_epochs 覆盖
+# ============================================================
+trainer:
+  max_epochs: 20        # QAT 训练轮数
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+
+# ============================================================
+# 默认钩子配置（自动注册）
+# ============================================================
+
+# 日志记录
+logger_cfg:
+  log_interval: 10
+
+# 检查点保存
+checkpoint_cfg:
+  max_keep_ckpts: 5
+  save_best: true
+  save_last: true
+  metric_name: accuracy
+  metric_mode: max         # accuracy 用 max, loss 用 min
+
+# 验证评估
+eval_cfg:
+  eval_interval: 1
+  metric_name: accuracy
+  save_best: true
+  # 自定义评估器（可选）
+  # evaluator_cfg:
+  #   type: ClassificationEvaluator
+  #   num_classes: 2
+  #   compute_auc: true
+  # 自定义指标函数（可选，需在代码中定义）
+  # custom_metrics_fn: null
+
+# ============================================================
+# 可选钩子配置
+# 注意: QATHook 会自动添加，无需手动配置
+# ============================================================
+hooks:
+  # TensorBoard 可视化
+  - type: TensorBoardHook
+    enabled: true
+  
+  # 早停机制 (QAT 训练可适当放宽)
+  - type: EarlyStoppingHook
+    enabled: true
+    patience: 10         # QAT 训练 patience 可以大一些
+    metric_name: loss
+    mode: min
+    min_delta: 0.001
+  
+  # 学习率预热 (QAT 训练建议使用)
+  - type: LRSchedulerHook
+    enabled: true
+    warmup_epochs: 2     # 预热 epoch 数
+    warmup_lr: 0.0000001 # 预热初始学习率
+  
+  # QATHook (自动添加，以下为参考配置)
+  # - type: QATHook
+  #   freeze_observer_epoch: 2
+  #   freeze_bn_epoch: 3
+  #   verbose: true

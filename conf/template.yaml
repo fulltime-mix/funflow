@@ -1,0 +1,156 @@
+
+model: 
+  type: GIPDModel
+  backbone:
+    type: ResNet1D
+    input_dim: 16
+    layers: [2, 2, 2, 2]
+    base_channels: 64
+    block_type: basic
+    dropout: 0.1
+    strides: [1, 2, 2, 2]
+  head:
+    type: GIPDHead
+    in_channels: 512
+    dropout: 0.5
+  loss:
+    type: GIPDLoss
+    parkinson_weight: 0.5
+    hoehn_yahr_weight: 0.5
+    updrsm_weight: 0.5
+    healthy_consistency_weight: 0.5
+    regression_loss: smooth_l1
+
+data:
+  num_workers: 0
+  prefetch_factor: None
+
+  train: 
+    data_file: ./data/train/data.jsonl
+    conf: 
+      processor_module: local.processor.processor
+      shuffle: true
+      parse_raw_conf: 
+        label_map: 
+          healthy: 0
+          parkinson: 1
+      processors: 
+        - name: load_series
+          enabled: true
+        - name: speed_perturb
+          enabled: true
+          speed_factors: [0.9, 1.1]
+          prob: 0.5
+        - name: normalize
+          enabled: true
+          method: zscore
+        - name: random_masking
+          enabled: true
+          mask_prob: 0.01
+          mask_length: 3
+          prob: 0.3
+        - name: sliding_window
+          enabled: true
+          window_size: 2000
+          overlap: 1500
+          drop_last: false
+      shuffle_conf: 
+        shuffle_size: 1024
+      batch_conf: 
+        batch_size: 512
+      
+  val:
+    data_file: ./data/eval/data.jsonl
+    conf: 
+      processor_module: local.processor.processor
+      shuffle: false
+      parse_raw_conf: 
+        label_map: 
+          healthy: 0
+          parkinson: 1
+      processors: 
+        - name: load_series
+          enabled: true
+        - name: normalize
+          enabled: true
+          method: zscore
+        - name: sliding_window
+          enabled: true
+          window_size: 2000
+          overlap: 1500
+          drop_last: false
+      batch_conf: 
+        batch_size: 32
+        
+optimizer: 
+  type: AdamW
+  lr: 0.001
+  weight_decay: 0.01
+
+scheduler: 
+  type: CosineAnnealingLR
+  T_max: 100
+  eta_min: 0.000001
+
+trainer: 
+  max_epochs: 500
+  gradient_accumulation_steps: 1
+  max_grad_norm: 5.0
+
+paramwise_cfg: 
+  backbone_lr_mult: 1.0
+  head_lr_mult: 1.0
+  neck_lr_mult: 1.0
+  bias_lr_mult: 1.0
+  bias_decay_mult: 0.0
+  norm_decay_mult: 0.0
+  base_weight_decay: 0.01
+  custom_patterns: 
+    layer4: {lr_mult: 1.0}  # 包含匹配
+    layer5: {lr_mult: 0.5}  # 包含匹配
+    regex:layer[0-3]: {lr_mult: 0.1}  # 正则匹配
+
+freeze_cfg: 
+  freeze_layers: [
+    'backbone.layer1',
+    'backbone.layer2'
+  ]  # 包含匹配
+  # freeze_layers: ['regex:backbone\\.layer[0-2]']  # 正则匹配
+
+
+# 默认hook配置
+logger_cfg: 
+  log_interval: 100
+
+eval_cfg:
+  eval_interval: 1
+  eval_interval_by_step: null
+  evaluator_cfg: 
+    type: GIPDEvaluator
+
+checkpoint_cfg:
+  metric_name: updrsm_mae
+  metric_mode: min
+  max_keep_ckpts: 10
+  save_best: true
+  save_last: true
+
+# 可选hook配置
+hooks:
+  # TensorBoard 可视化
+  - type: TensorBoardHook
+    enabled: true
+  
+  # 早停机制
+  - type: EarlyStoppingHook
+    enabled: true
+    patience: 50
+    metric_name: updrsm_mae
+    metric_mode: min         
+    min_delta: 0.0001
+  
+  # 学习率预热
+  - type: LRSchedulerHook
+    enabled: true
+    warmup_epochs: 3
+    warmup_lr: 0.000001
