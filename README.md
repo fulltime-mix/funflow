@@ -32,6 +32,7 @@ processor规范：由串联的一系列生成器构成
 5. n+3. collate_fn（用于把数据整理成送入模型的形状并转为tensor，然后以字典形式返回，一般包含feats，labels等等键，可根据任务返回所需的任何键，比如构造对比学习样本对之类的都可以）（必须实现）
 
 ## 构建模型
+模板方法模式
 
 基类模型默认架构：preprocessing(upsampling, cmvn等等)->backbone->neck->head->loss
 
@@ -89,6 +90,7 @@ trainer的核心：
 - QATHook：用于在训练过程中控制量化观察器和Norm统计的冻结时机。
 
 ### evaluator
+模板方法模式
 
 从EvalHook解耦出来根据当前任何实现，配合EvalHook计算你需要的指标
 
@@ -98,6 +100,7 @@ trainer的核心：
 - compute_metrics：（抽象方法，必须实现）用于计算所有你需要的指标。
 
 ## inference
+模板方法模式
 
 实现推理逻辑
 
@@ -116,6 +119,7 @@ trainer的核心：
 inference_cli：命令行工具
 
 ## export
+模板方法模式
 
 实现导出逻辑
 
